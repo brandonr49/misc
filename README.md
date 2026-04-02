@@ -8,8 +8,9 @@ gets a new machine to a usable dev state with a single command.
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOURORG/workstation-setup.git
-cd workstation-setup
+git clone https://github.com/brandonr49/misc.git
+# This will trigger xcode install to get the git command?
+cd misc/
 ```
 
 ### macOS
