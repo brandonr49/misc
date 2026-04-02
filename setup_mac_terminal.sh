@@ -860,6 +860,9 @@ CASK_APPS=(
     grandperspective
     stats
     bitwarden
+    forklift          # dual-pane file manager with SFTP/SMB/NFS/S3
+    cyberduck         # free network file browser (SFTP/S3/WebDAV)
+    radio-silence     # outbound firewall — block apps from phoning home
 
     # Gaming
     steam
@@ -931,6 +934,7 @@ if command -v dockutil &>/dev/null; then
         "/Applications/VLC.app" \
         "/Applications/Steam.app" \
         "/Applications/Bitwarden.app" \
+        "/Applications/ForkLift.app" \
         "/Applications/OpenVPN Connect.app" \
         "/Applications/Microsoft Remote Desktop.app" \
         "/Applications/UTM.app"; do
@@ -1150,7 +1154,8 @@ echo "    Media:          Jellyfin, Grayjay, Spotify, VLC, MX Player"
 echo "    Networking:     Tailscale, OpenVPN Connect, Microsoft Remote Desktop"
 echo "    Utilities:      BetterTouchTool, Raycast, Karabiner-Elements,"
 echo "                    KeepingYouAwake, AppCleaner, The Unarchiver,"
-echo "                    GrandPerspective, Stats, Bitwarden"
+echo "                    GrandPerspective, Stats, Bitwarden, ForkLift,"
+echo "                    Cyberduck, Radio Silence"
 echo "    Gaming:         Steam"
 echo "    Virtualization: UTM"
 echo ""
