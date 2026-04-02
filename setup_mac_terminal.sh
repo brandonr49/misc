@@ -913,6 +913,7 @@ CASK_APPS=(
     forklift          # dual-pane file manager with SFTP/SMB/NFS/S3
     cyberduck         # free network file browser (SFTP/S3/WebDAV)
     radio-silence     # outbound firewall — block apps from phoning home
+    maccy             # clipboard history manager (Cmd+Shift+C)
 
     # Gaming / Creative
     steam
@@ -1119,6 +1120,14 @@ if [ -d "/Applications/KeepingYouAwake.app" ]; then
     osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/KeepingYouAwake.app", hidden:false}' 2>/dev/null || true
     open -a KeepingYouAwake 2>/dev/null || true
     ok "KeepingYouAwake added to login items + launched"
+fi
+
+# ── Maccy — auto-start at login (clipboard history, menu bar) ────────────
+if [ -d "/Applications/Maccy.app" ]; then
+    osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Maccy.app", hidden:false}' 2>/dev/null || true
+    defaults write org.p0deje.Maccy hideTitle -bool true 2>/dev/null || true
+    open -a Maccy 2>/dev/null || true
+    ok "Maccy added to login items + launched (Cmd+Shift+C)"
 fi
 
 # ── BetterTouchTool — invert scroll for mice only ────────────────────────
