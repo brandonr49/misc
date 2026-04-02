@@ -34,10 +34,6 @@ section() {
     echo ""
 }
 
-# Refresh sudo timestamp — call between long-running sections
-refresh_sudo() {
-    sudo -v 2>/dev/null || true
-}
 
 ########################################
 # 0. Pre-flight checks
@@ -61,14 +57,18 @@ if [[ "$EUID" -eq 0 ]]; then
 fi
 ok "Running as user $(whoami)"
 
-# Cache sudo credentials upfront so the script can run unattended.
-# Background process refreshes the timestamp every 30s so it never expires.
-info "Requesting sudo password (will be cached for the duration of this script)..."
-sudo -v
-while true; do sudo -n true; sleep 30; kill -0 "$$" || exit; done 2>/dev/null &
-SUDO_KEEPALIVE_PID=$!
-trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
-ok "sudo credentials cached"
+# Set up passwordless sudo so the script can run fully unattended.
+# Creates a drop-in file in /etc/sudoers.d/ (doesn't touch main sudoers).
+# Delete /etc/sudoers.d/<username> to revert.
+SUDOERS_FILE="/etc/sudoers.d/$(whoami)"
+if sudo -n true 2>/dev/null; then
+    ok "Passwordless sudo already configured"
+else
+    info "Setting up passwordless sudo (will prompt for password one last time)..."
+    echo "$(whoami) ALL=(ALL) NOPASSWD: ALL" | sudo tee "$SUDOERS_FILE" > /dev/null
+    sudo chmod 0440 "$SUDOERS_FILE"
+    ok "Passwordless sudo configured via $SUDOERS_FILE"
+fi
 
 # Track issues for the summary
 MANUAL_STEPS=()
@@ -545,7 +545,6 @@ ok "~/.config/git/ignore written"
 ########################################
 section "macOS Preferences"
 
-refresh_sudo
 
 # ── Animations ─────────────────────────────────────────────────────────────
 defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false
@@ -665,7 +664,6 @@ ok "Preferences applied (some need logout/reboot)"
 ########################################
 section "Removing bloat applications"
 
-refresh_sudo
 
 for app in GarageBand iMovie Keynote Pages Numbers; do
     if [ -d "/Applications/$app.app" ]; then
@@ -681,7 +679,6 @@ done
 ########################################
 section "GUI Applications (brew cask)"
 
-refresh_sudo
 
 # Prevent brew from auto-updating between each cask install.
 # We already did brew update — re-updating 30 times wastes minutes
@@ -740,7 +737,6 @@ CASK_APPS=(
 )
 
 for app in "${CASK_APPS[@]}"; do
-    refresh_sudo
     if brew list --cask "$app" &>/dev/null; then
         ok "$app already installed"
     else
@@ -794,7 +790,6 @@ fi
 ########################################
 section "Xcode IDE"
 
-refresh_sudo
 
 if [ -d "/Applications/Xcode.app" ]; then
     ok "Xcode already installed"
