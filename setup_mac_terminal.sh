@@ -9,6 +9,7 @@
 # Options:
 #   -h, --help          Show this help message
 #   --hostname NAME     Set the Mac's hostname (HostName, LocalHostName, ComputerName)
+#   --backup            Back up existing dotfiles before overwriting (off by default)
 #
 # If --hostname is not passed, edit HOSTNAME below before running.
 # Leave empty to skip hostname configuration.
@@ -19,9 +20,8 @@
 #
 
 # ── User-editable defaults ────────────────────────────────────────────────
-# Set your desired hostname here, or pass --hostname on the command line.
-# Leave empty to skip hostname configuration entirely.
 HOSTNAME=""
+BACKUP_DOTFILES=false
 # ──────────────────────────────────────────────────────────────────────────
 
 set -e
@@ -43,6 +43,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --hostname=*)
             HOSTNAME="${1#*=}"
+            shift
+            ;;
+        --backup)
+            BACKUP_DOTFILES=true
             shift
             ;;
         *)
@@ -83,6 +87,15 @@ if [[ "$(uname)" != "Darwin" ]]; then
     exit 1
 fi
 ok "Running on macOS $(sw_vers -productVersion)"
+
+# Detect laptop vs desktop (used for WiFi and other conditional settings)
+IS_LAPTOP=false
+if ioreg -l 2>/dev/null | grep -q "AppleSmartBattery"; then
+    IS_LAPTOP=true
+    ok "Hardware: laptop (battery detected)"
+else
+    ok "Hardware: desktop (no battery)"
+fi
 
 if [[ "$EUID" -eq 0 ]]; then
     fail "Do not run this script as root or with sudo."
@@ -182,6 +195,10 @@ CLI_TOOLS=(
     ffmpeg
     whisper-cpp
     bitwarden-cli
+    displayplacer     # CLI display resolution/arrangement config
+    neovim
+    gh                # GitHub CLI
+    tea               # Gitea CLI
     zsh-autosuggestions
     zsh-syntax-highlighting
 )
@@ -209,20 +226,22 @@ fi
 ########################################
 section "Dotfiles"
 
-BACKUP_DIR=~/dotfiles_backup_$(date +%Y%m%d_%H%M%S)
-NEEDS_BACKUP=false
-
-for f in ~/.zshrc ~/.zsh_alias ~/.zsh_ps1 ~/.vim/.vimrc ~/.gitconfig; do
-    [ -f "$f" ] && NEEDS_BACKUP=true && break
-done
-
-if $NEEDS_BACKUP; then
-    info "Backing up existing dotfiles to $BACKUP_DIR"
-    mkdir -p "$BACKUP_DIR"
+if $BACKUP_DOTFILES; then
+    BACKUP_DIR=~/dotfiles_backup_$(date +%Y%m%d_%H%M%S)
+    NEEDS_BACKUP=false
     for f in ~/.zshrc ~/.zsh_alias ~/.zsh_ps1 ~/.vim/.vimrc ~/.gitconfig; do
-        [ -f "$f" ] && cp "$f" "$BACKUP_DIR/" 2>/dev/null || true
+        [ -f "$f" ] && NEEDS_BACKUP=true && break
     done
-    ok "Backup complete"
+    if $NEEDS_BACKUP; then
+        info "Backing up existing dotfiles to $BACKUP_DIR"
+        mkdir -p "$BACKUP_DIR"
+        for f in ~/.zshrc ~/.zsh_alias ~/.zsh_ps1 ~/.vim/.vimrc ~/.gitconfig; do
+            [ -f "$f" ] && cp "$f" "$BACKUP_DIR/" 2>/dev/null || true
+        done
+        ok "Backup complete → $BACKUP_DIR"
+    fi
+else
+    ok "Dotfile backup skipped (use --backup to enable)"
 fi
 
 ########################################
@@ -697,8 +716,14 @@ defaults write com.apple.finder ShowRecentTags -bool false
 ok "iCloud Drive and tags disabled"
 
 # ── Network (uncomment as needed) ─────────────────────────────────────────
-# Turn off WiFi (uncomment for desktops — laptops need WiFi)
-# networksetup -setairportpower en0 off
+# Turn off WiFi on desktops (laptops keep WiFi on)
+if ! $IS_LAPTOP; then
+    networksetup -setairportpower en0 off 2>/dev/null || \
+    networksetup -setairportpower Wi-Fi off 2>/dev/null || true
+    ok "WiFi disabled (desktop)"
+else
+    ok "WiFi left on (laptop detected)"
+fi
 
 # Set a static IP (edit values, uncomment to use)
 # STATIC_IP="192.168.1.100"
@@ -726,6 +751,11 @@ defaults -currentHost write NSGlobalDomain com.apple.mouse.tapBehavior -int 1
 defaults write NSGlobalDomain com.apple.mouse.tapBehavior -int 1
 defaults write NSGlobalDomain com.apple.trackpad.scaling -float 2.0
 ok "Trackpad preferences set"
+
+# ── Mouse ──────────────────────────────────────────────────────────────────
+# Mouse tracking speed: 0.0 (slow) to 3.0 (fast). 7/10 = 2.1
+defaults write NSGlobalDomain com.apple.mouse.scaling -float 2.1
+ok "Mouse tracking speed set (7/10)"
 
 # ── Dock ───────────────────────────────────────────────────────────────────
 defaults write com.apple.dock autohide -bool true
@@ -775,6 +805,22 @@ defaults write NSGlobalDomain NSDisableAutomaticTermination -bool true
 defaults write com.apple.systempreferences NSQuitAlwaysKeepsWindows -bool false
 defaults write com.apple.finder QLEnableTextSelection -bool true
 ok "Misc set"
+
+# ── Widgets / Notification Center ─────────────────────────────────────────
+# Disable desktop widgets
+defaults write com.apple.WindowManager StandardHideDesktopIcons -bool true 2>/dev/null || true
+defaults write com.apple.WindowManager HideDesktop -bool true 2>/dev/null || true
+
+# Disable widget suggestions
+defaults write com.apple.widgets widgetSuggestions -bool false 2>/dev/null || true
+
+# Disable Notification Center (may not fully work on Sequoia+ due to SIP)
+launchctl unload -w /System/Library/LaunchAgents/com.apple.notificationcenterui.plist 2>/dev/null || true
+
+# Disable all app notifications by default
+defaults write com.apple.notificationcenterui showWidgets -bool false 2>/dev/null || true
+
+ok "Widgets and Notification Center disabled"
 
 # ── iTerm2 ────────────────────────────────────────────────────────────────
 defaults write com.googlecode.iterm2 "Silence bell" -bool true 2>/dev/null || true
@@ -868,8 +914,10 @@ CASK_APPS=(
     cyberduck         # free network file browser (SFTP/S3/WebDAV)
     radio-silence     # outbound firewall — block apps from phoning home
 
-    # Gaming
+    # Gaming / Creative
     steam
+    godot             # game engine
+    aseprite          # pixel art / sprite editor
 
     # Virtualization
     utm
@@ -1066,6 +1114,19 @@ defaults write com.hnc.Discord OPEN_ON_STARTUP -bool false 2>/dev/null || true
 
 ok "Auto-launch disabled for major apps"
 
+# ── KeepingYouAwake — auto-start at login (menu bar app) ─────────────────
+if [ -d "/Applications/KeepingYouAwake.app" ]; then
+    osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/KeepingYouAwake.app", hidden:false}' 2>/dev/null || true
+    open -a KeepingYouAwake 2>/dev/null || true
+    ok "KeepingYouAwake added to login items + launched"
+fi
+
+# ── BetterTouchTool — invert scroll for mice only ────────────────────────
+# Keeps macOS natural scrolling ON for trackpads, inverts for normal mice.
+# This is BTT's built-in per-device scroll inversion.
+defaults write com.hegenberg.BetterTouchTool BTTReverseScrollingOnNormalMice -bool true 2>/dev/null || true
+ok "BTT: mouse scroll inversion enabled (trackpad unchanged)"
+
 ########################################
 # 16. Xcode IDE
 ########################################
@@ -1076,16 +1137,13 @@ if [ -d "/Applications/Xcode.app" ]; then
     ok "Xcode already installed"
 else
     if command -v mas &>/dev/null; then
-        if mas account &>/dev/null 2>&1; then
-            info "Installing Xcode via Mac App Store (~13GB, may take a while)..."
-            mas install 497799835 || {
-                warn "Xcode install via mas failed"
-                MANUAL_STEPS+=("Install Xcode: open App Store or run 'mas install 497799835'")
-            }
-        else
-            warn "Not signed into Mac App Store — cannot install Xcode automatically"
-            MANUAL_STEPS+=("Sign into App Store, then: mas install 497799835")
-        fi
+        # Note: mas account is broken on newer macOS — just try the install directly.
+        # If not signed into App Store, mas will fail with a clear error.
+        info "Installing Xcode via Mac App Store (~13GB, may take a while)..."
+        mas install 497799835 2>&1 || {
+            warn "Xcode install via mas failed (sign into App Store first?)"
+            MANUAL_STEPS+=("Install Xcode: open App Store, sign in, then run 'mas install 497799835'")
+        }
     else
         warn "mas not available"
         MANUAL_STEPS+=("Install Xcode from the Mac App Store")
@@ -1109,7 +1167,7 @@ if command -v mas &>/dev/null; then
         ok "MX Player already installed"
     else
         info "Installing MX Player from App Store..."
-        mas install 1579641008 2>/dev/null || warn "MX Player install failed (sign into App Store?)"
+        mas install 1579641008 2>&1 || warn "MX Player install failed (sign into App Store first?)"
     fi
 else
     warn "mas not available — install MX Player manually from the App Store"
@@ -1140,6 +1198,39 @@ osascript -e 'tell application "Finder" to set desktop picture to POSIX file "/S
 osascript -e 'tell application "System Events" to tell every desktop to set picture to "/System/Library/Desktop Pictures/Solid Colors/Black.png"' 2>/dev/null || \
 warn "Could not set desktop background automatically"
 ok "Desktop background set to black"
+
+########################################
+# 18. Display — "More Space" resolution
+########################################
+section "Display resolution"
+
+if command -v displayplacer &>/dev/null; then
+    info "Setting all displays to 'More Space' (highest scaled resolution)..."
+    # For each display, find the highest-resolution mode with scaling:on
+    # and apply it. This is what macOS calls "More Space" in System Settings.
+    displayplacer list 2>/dev/null | grep -E "^  mode" | while IFS= read -r line; do
+        : # just parsing — actual config below
+    done
+
+    # Get display IDs and their highest scaled mode
+    DISPLAY_IDS=$(displayplacer list 2>/dev/null | grep "Persistent screen id:" | awk '{print $NF}')
+    for DISP_ID in $DISPLAY_IDS; do
+        # Find the highest mode number with scaling:on for this display
+        HIGHEST_MODE=$(displayplacer list 2>/dev/null | \
+            awk "/Persistent screen id: $DISP_ID/,/^$/" | \
+            grep "scaling:on" | \
+            tail -1 | \
+            grep -o "mode [0-9]*" | \
+            awk '{print $2}')
+        if [ -n "$HIGHEST_MODE" ]; then
+            info "Display $DISP_ID → mode $HIGHEST_MODE"
+            displayplacer "id:$DISP_ID mode:$HIGHEST_MODE" 2>/dev/null || true
+        fi
+    done
+    ok "Displays set to More Space"
+else
+    warn "displayplacer not installed — set display to 'More Space' manually in System Settings > Displays"
+fi
 
 ########################################
 # 18. BetterTouchTool preset
@@ -1219,22 +1310,24 @@ else
         warn "OpenClaw install failed (may need Node 22+ — run: nvm install 22)"
 fi
 
-# ── Hermes Agent ──────────────────────────────────────────────────────────
+# ── Hermes Agent (commented out — walk through setup manually post-install) ──
 # Self-improving AI agent by Nous Research. Installs its own Python/deps.
-# After install, run: hermes setup
-if command -v hermes &>/dev/null; then
-    ok "Hermes Agent already installed"
-else
-    info "Installing Hermes Agent..."
-    curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash 2>/dev/null && \
-        ok "Hermes Agent installed" || \
-        warn "Hermes Agent install failed"
-fi
+# To install manually:
+#   curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
+#   hermes setup
+# if command -v hermes &>/dev/null; then
+#     ok "Hermes Agent already installed"
+# else
+#     info "Installing Hermes Agent..."
+#     curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash 2>/dev/null && \
+#         ok "Hermes Agent installed" || \
+#         warn "Hermes Agent install failed"
+# fi
 
 info ""
-info "Both agents require interactive setup after install:"
+info "AI agents require interactive setup after install:"
 info "  OpenClaw:  openclaw onboard --install-daemon"
-info "  Hermes:    hermes setup"
+info "  Hermes:    (commented out — install manually when ready)"
 info "These configure your LLM provider (API keys) and messaging channels."
 
 ########################################
@@ -1249,14 +1342,14 @@ echo "    Browsers:       Chrome, Firefox (default)"
 echo "    Communication:  Discord, Slack, Zulip"
 echo "    Development:    Android Studio, VS Code, Docker, iTerm2, Fork, GitUp,"
 echo "                    GitHub Desktop, Claude Code"
-echo "    AI/LLM:         Claude Desktop, Ollama, OpenClaw, Hermes Agent"
+echo "    AI/LLM:         Claude Desktop, Ollama, OpenClaw"
 echo "    Media:          Jellyfin, Grayjay, Spotify, VLC, MX Player"
 echo "    Networking:     Tailscale, OpenVPN Connect, Microsoft Remote Desktop"
 echo "    Utilities:      BetterTouchTool, Raycast, Karabiner-Elements,"
 echo "                    KeepingYouAwake, AppCleaner, The Unarchiver,"
 echo "                    GrandPerspective, Stats, Bitwarden, ForkLift,"
 echo "                    Cyberduck, Radio Silence"
-echo "    Gaming:         Steam"
+echo "    Gaming/Creative: Steam, Godot, Aseprite"
 echo "    Virtualization: UTM"
 echo ""
 echo "  Terminal + Dev:"
@@ -1264,7 +1357,7 @@ echo "    Zsh vi-mode, Ctrl-R search, 10M line history"
 echo "    Fish-like autosuggestions + syntax highlighting"
 echo "    Vim: gruvbox, NERDTree, mouse/trackpad, bell disabled"
 echo "    Git: colored diffs, diff-highlight, aliases"
-echo "    CLI: whisper-cpp, ffmpeg, Claude Code, bitwarden-cli"
+echo "    CLI: whisper-cpp, ffmpeg, Claude Code, bitwarden-cli, neovim, gh, tea"
 echo "    Python venv: /opt/brobpy (activated by default)"
 echo "    subtitle command: generate .srt files for Jellyfin (whisper-cpp)"
 echo "    All bells/beeps disabled (zsh, vim, iTerm, system)"
@@ -1283,6 +1376,10 @@ echo "    Desktop background solid black, iTerm2 background black"
 echo "    Auto-launch disabled: Spotify, Docker, Slack, Discord, Steam"
 echo "    Microsoft Auto-Update killed"
 echo "    BetterTouchTool preset imported (config/btt_preset.bttpreset)"
+echo "      Globe/fn key → Mission Control (like GNOME Super key)"
+echo "      Ctrl+Shift+K → Toggle KeepingYouAwake"
+echo "      Mouse Button 4/5 → Back/Forward (Cmd+[/])"
+echo "      Mouse scroll inversion for mice (trackpad unchanged)"
 echo ""
 
 echo -e "${YELLOW}  Manual steps:${NC}"
@@ -1296,13 +1393,15 @@ echo "     Full Disk Access: iTerm, GrandPerspective"
 echo "  4. Git identity: git config --global user.name/email"
 echo "  5. Chrome extensions: verify at chrome://policy (may need manual install)"
 echo "  6. Ollama: ollama pull llama3"
-echo "  7. AI Agents (configure LLM provider + channels):"
+echo "  7. AI Agents:"
 echo "     openclaw onboard --install-daemon"
-echo "     hermes setup"
-echo "  8. Android Studio: complete setup wizard on first launch"
-echo "  9. AirCaption: download from https://www.aircaption.com/download"
-echo " 10. TODO — CornerFix: https://github.com/makalin/CornerFix"
-echo " 11. TODO — Window management / Spaces: pick and configure one of:"
+echo "     Hermes (optional): curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
+echo "  8. BTT: open BetterTouchTool and verify preset triggers imported correctly"
+echo "     Globe/fn → Mission Control, Ctrl+Shift+K → KeepingYouAwake, Mouse 4/5 → Back/Fwd"
+echo "  9. Android Studio: complete setup wizard on first launch"
+echo " 10. AirCaption: download from https://www.aircaption.com/download"
+echo " 11. TODO — CornerFix: https://github.com/makalin/CornerFix"
+echo " 12. TODO — Window management / Spaces: pick and configure one of:"
 echo "     AeroSpace: brew install --cask nikitabobko/tap/aerospace"
 echo "     yabai+skhd: brew install koekeishiya/formulae/yabai koekeishiya/formulae/skhd"
 echo "     Or stick with BetterTouchTool + macOS native tiling"
@@ -1326,5 +1425,7 @@ if [ ${#FAILED_CASKS[@]} -gt 0 ]; then
     echo ""
 fi
 
-echo "  Dotfile backups: $BACKUP_DIR"
-echo ""
+if $BACKUP_DOTFILES && [ -n "${BACKUP_DIR:-}" ]; then
+    echo "  Dotfile backups: $BACKUP_DIR"
+    echo ""
+fi

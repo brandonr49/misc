@@ -1,13 +1,57 @@
 {
   "BTTPresetName": "workstation-setup",
+  "BTTPresetUUID": "workstation-setup-2026",
   "BTTPresetContent": [
     {
       "BTTAppBundleIdentifier": "BT.G",
       "BTTAppName": "Global",
       "BTTTriggers": [
+        {
+          "BTTTriggerType": 0,
+          "BTTTriggerClass": "BTTTriggerTypeKeyboardShortcut",
+          "BTTTriggerTypeDescription": "Globe/fn Key → Mission Control",
+          "BTTShortcutKeyCode": 63,
+          "BTTShortcutModifierKeys": 0,
+          "BTTEnabled2": 1,
+          "BTTTriggerOnDown": 1,
+          "BTTPredefinedActionType": 4,
+          "BTTPredefinedActionName": "Mission Control"
+        },
+        {
+          "BTTTriggerType": 0,
+          "BTTTriggerClass": "BTTTriggerTypeKeyboardShortcut",
+          "BTTTriggerTypeDescription": "Ctrl+Shift+K → Toggle KeepingYouAwake",
+          "BTTShortcutKeyCode": 40,
+          "BTTShortcutModifierKeys": 393216,
+          "BTTEnabled2": 1,
+          "BTTTriggerOnDown": 1,
+          "BTTPredefinedActionType": 49,
+          "BTTPredefinedActionName": "Open URL / Open URL With Selection",
+          "BTTOpenURL": "keepingyouawake:///toggle"
+        },
+        {
+          "BTTTriggerType": 1,
+          "BTTTriggerClass": "BTTTriggerTypeMouse",
+          "BTTTriggerTypeDescription": "Mouse Button 4 → Back (Cmd+[)",
+          "BTTPointingDeviceButtonNumber": 3,
+          "BTTEnabled2": 1,
+          "BTTPredefinedActionType": 55,
+          "BTTPredefinedActionName": "Keyboard Shortcut",
+          "BTTShortcutToSend": "33,1048576"
+        },
+        {
+          "BTTTriggerType": 1,
+          "BTTTriggerClass": "BTTTriggerTypeMouse",
+          "BTTTriggerTypeDescription": "Mouse Button 5 → Forward (Cmd+])",
+          "BTTPointingDeviceButtonNumber": 4,
+          "BTTEnabled2": 1,
+          "BTTPredefinedActionType": 55,
+          "BTTPredefinedActionName": "Keyboard Shortcut",
+          "BTTShortcutToSend": "30,1048576"
+        }
       ]
     }
   ],
-  "BTTPresetNotes": "Workstation setup BTT preset. Add your mouse button mappings, trackpad gestures, keyboard shortcuts, etc. Export from BTT and replace this file.",
+  "BTTPresetNotes": "Workstation setup BTT preset.\n\nTriggers:\n  Globe/fn key → Mission Control (like GNOME Super key)\n  Ctrl+Shift+K → Toggle KeepingYouAwake\n  Mouse Button 4 → Cmd+[ (Back in Finder/browsers)\n  Mouse Button 5 → Cmd+] (Forward in Finder/browsers)\n\nScroll:\n  Mouse scroll inversion is set via defaults write (not in this preset).\n\nNOTE: If triggers don't work after import, open BTT and verify/re-create them.\nThe action type IDs may need adjustment for your BTT version.\nTo update this preset: BTT > Presets > right-click > Export Preset > replace this file.",
   "BTTPresetSnapshots": []
 }
