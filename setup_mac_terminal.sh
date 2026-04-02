@@ -4,16 +4,54 @@
 # Installs applications, configures macOS preferences, sets up terminal environment.
 #
 # Usage:
-#   bash ~/setup_mac.sh
+#   bash setup_mac.sh [OPTIONS]
+#
+# Options:
+#   -h, --help          Show this help message
+#   --hostname NAME     Set the Mac's hostname (HostName, LocalHostName, ComputerName)
+#
+# If --hostname is not passed, edit HOSTNAME below before running.
+# Leave empty to skip hostname configuration.
 #
 # IMPORTANT: Do NOT run with sudo. Run as your normal user.
-#   The script will prompt for sudo only when specific commands need it.
-#
 #   Safe to re-run (idempotent).
 #   After running, a reboot is recommended for all preferences to take effect.
 #
 
+# ── User-editable defaults ────────────────────────────────────────────────
+# Set your desired hostname here, or pass --hostname on the command line.
+# Leave empty to skip hostname configuration entirely.
+HOSTNAME=""
+# ──────────────────────────────────────────────────────────────────────────
+
 set -e
+
+usage() {
+    sed -n '2,/^$/{ s/^# \?//; p }' "$0"
+    exit 0
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            ;;
+        --hostname)
+            HOSTNAME="$2"
+            shift 2
+            ;;
+        --hostname=*)
+            HOSTNAME="${1#*=}"
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Run with -h for usage."
+            exit 1
+            ;;
+    esac
+done
 
 YELLOW='\033[1;33m'
 GREEN='\033[1;32m'
@@ -75,7 +113,20 @@ MANUAL_STEPS=()
 FAILED_CASKS=()
 
 ########################################
-# 1. Xcode Command Line Tools
+# 1. Hostname
+########################################
+if [ -n "$HOSTNAME" ]; then
+    section "Hostname"
+    info "Setting hostname to: $HOSTNAME"
+    sudo scutil --set HostName "$HOSTNAME"
+    sudo scutil --set LocalHostName "$HOSTNAME"
+    sudo scutil --set ComputerName "$HOSTNAME"
+    sudo dscacheutil -flushcache
+    ok "Hostname set to $HOSTNAME (HostName + LocalHostName + ComputerName)"
+fi
+
+########################################
+# 2. Xcode Command Line Tools
 ########################################
 section "Xcode Command Line Tools"
 
@@ -125,6 +176,12 @@ CLI_TOOLS=(
     tree
     dockutil
     mas
+    mysides       # Finder sidebar management
+    node
+    python
+    ffmpeg
+    whisper-cpp
+    bitwarden-cli
     zsh-autosuggestions
     zsh-syntax-highlighting
 )
@@ -138,6 +195,14 @@ for tool in "${CLI_TOOLS[@]}"; do
     fi
 done
 ok "CLI tools installed"
+
+# Claude Code (requires node, installed above)
+if command -v claude &>/dev/null; then
+    ok "Claude Code already installed"
+else
+    info "Installing Claude Code via npm..."
+    npm install -g @anthropic-ai/claude-code 2>/dev/null || warn "Failed to install Claude Code"
+fi
 
 ########################################
 # 4. Dotfiles — backup
@@ -226,10 +291,10 @@ ok "~/.zsh_alias written"
 ########################################
 info "Writing ~/.zsh_ps1"
 cat > ~/.zsh_ps1 << 'PS1_EOF'
-COLOR1="%F{#1E90FF}"
-COLOR2="%F{#00FF00}"
-COLOR4="%F{#FFA500}"
-WHITE="%F{#FFFFFF}"
+COLOR1="%F{33}"   # blue - username (works in Terminal.app + iTerm2)
+COLOR2="%F{46}"   # green - hostname
+COLOR4="%F{214}"  # orange - git branch
+WHITE="%F{15}"    # bright white
 
 function git_branch_name()
 {
@@ -303,6 +368,13 @@ source ~/.zsh_alias
 # Homebrew PATH
 ####################################################################################################
 eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null)"
+
+####################################################################################################
+# Python venv (/opt/brobpy)
+####################################################################################################
+if [ -f /opt/brobpy/bin/activate ]; then
+  source /opt/brobpy/bin/activate
+fi
 
 ####################################################################################################
 # User customization (not clobbered by re-running setup)
@@ -541,7 +613,24 @@ IGNORE_EOF
 ok "~/.config/git/ignore written"
 
 ########################################
-# 10. macOS Preferences
+# 10. Python venv (/opt/brobpy)
+########################################
+section "Python venv"
+
+if [ -d /opt/brobpy ]; then
+    ok "Python venv already exists at /opt/brobpy"
+else
+    info "Creating Python venv at /opt/brobpy..."
+    sudo mkdir -p /opt/brobpy
+    sudo chown "$(whoami)" /opt/brobpy
+    python3 -m venv /opt/brobpy
+    ok "Python venv created at /opt/brobpy"
+    info "Upgrading pip..."
+    /opt/brobpy/bin/pip install --upgrade pip 2>/dev/null || true
+fi
+
+########################################
+# 11. macOS Preferences
 ########################################
 section "macOS Preferences"
 
@@ -583,6 +672,41 @@ defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true
 defaults write com.apple.desktopservices DSDontWriteUSBStores -bool true
 defaults write NSGlobalDomain com.apple.springing.enabled -bool true
 ok "Finder preferences set"
+
+# ── Finder sidebar ────────────────────────────────────────────────────────
+if command -v mysides &>/dev/null; then
+    # Remove unwanted sidebar items
+    mysides remove Recents 2>/dev/null || true
+    mysides remove Tags 2>/dev/null || true
+    mysides remove "iCloud Drive" 2>/dev/null || true
+    # Add home directory
+    mysides add "$(whoami)" "file://$HOME/" 2>/dev/null || true
+    ok "Finder sidebar configured"
+else
+    warn "mysides not available — sidebar items not modified"
+fi
+
+# Disable iCloud Drive (comment out if you use iCloud)
+defaults write com.apple.finder FXICloudDriveEnabled -bool false 2>/dev/null || true
+defaults write com.apple.finder FXICloudDriveDesktop -bool false 2>/dev/null || true
+defaults write com.apple.finder FXICloudDriveDocuments -bool false 2>/dev/null || true
+
+# Remove tags from sidebar
+defaults write com.apple.finder ShowRecentTags -bool false
+
+ok "iCloud Drive and tags disabled"
+
+# ── Network (uncomment as needed) ─────────────────────────────────────────
+# Turn off WiFi (uncomment for desktops — laptops need WiFi)
+# networksetup -setairportpower en0 off
+
+# Set a static IP (edit values, uncomment to use)
+# STATIC_IP="192.168.1.100"
+# SUBNET="255.255.255.0"
+# ROUTER="192.168.1.1"
+# DNS="8.8.8.8 8.8.4.4"
+# networksetup -setmanual "Ethernet" "$STATIC_IP" "$SUBNET" "$ROUTER"
+# networksetup -setdnsservers "Ethernet" $DNS
 
 # ── Keyboard ───────────────────────────────────────────────────────────────
 defaults write NSGlobalDomain KeyRepeat -int 2
@@ -648,9 +772,16 @@ defaults write com.apple.systempreferences NSQuitAlwaysKeepsWindows -bool false
 defaults write com.apple.finder QLEnableTextSelection -bool true
 ok "Misc set"
 
-# ── iTerm2 bell ───────────────────────────────────────────────────────────
+# ── iTerm2 ────────────────────────────────────────────────────────────────
 defaults write com.googlecode.iterm2 "Silence bell" -bool true 2>/dev/null || true
-ok "iTerm2 bell silenced"
+# Set default profile background to black (RGB 0,0,0)
+/usr/libexec/PlistBuddy -c "Set ':New Bookmarks:0:Background Color:Red Component' 0.0" \
+    ~/Library/Preferences/com.googlecode.iterm2.plist 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Set ':New Bookmarks:0:Background Color:Green Component' 0.0" \
+    ~/Library/Preferences/com.googlecode.iterm2.plist 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Set ':New Bookmarks:0:Background Color:Blue Component' 0.0" \
+    ~/Library/Preferences/com.googlecode.iterm2.plist 2>/dev/null || true
+ok "iTerm2 bell silenced + background set to black"
 
 # ── Apply ─────────────────────────────────────────────────────────────────
 info "Restarting affected services..."
@@ -702,6 +833,7 @@ CASK_APPS=(
     iterm2
     fork
     gitup-app
+    github
 
     # AI / LLM
     claude
@@ -734,19 +866,32 @@ CASK_APPS=(
 
     # Virtualization
     utm
+
+    # Window management / Spaces — PICK ONE, uncomment when you've decided:
+    # AeroSpace: i3-like tiling WM, no SIP disable, TOML config, virtual workspaces
+    #   brew install --cask nikitabobko/tap/aerospace
+    # yabai + skhd: more mature tiling WM, some features need SIP disabled
+    #   brew install koekeishiya/formulae/yabai koekeishiya/formulae/skhd
+    # BetterTouchTool (already installed above) also has window snapping features
+    # macOS native tiling (Sequoia+) is configured in the preferences section above
 )
 
 for app in "${CASK_APPS[@]}"; do
     if brew list --cask "$app" &>/dev/null; then
-        ok "$app already installed"
+        ok "$app already installed (via brew)"
     else
         info "Installing $app..."
-        if brew install --cask "$app" 2>&1; then
+        OUTPUT=$(brew install --cask "$app" 2>&1) && {
             ok "$app installed"
-        else
-            warn "Failed to install $app"
-            FAILED_CASKS+=("$app")
-        fi
+        } || {
+            if echo "$OUTPUT" | grep -qi "already exists"; then
+                ok "$app already installed (not via brew — skipping)"
+            else
+                echo "$OUTPUT" | tail -3
+                warn "Failed to install $app"
+                FAILED_CASKS+=("$app")
+            fi
+        }
     fi
 done
 
@@ -772,10 +917,23 @@ if command -v dockutil &>/dev/null; then
         "/Applications/Firefox.app" \
         "/Applications/Google Chrome.app" \
         "/Applications/Discord.app" \
+        "/Applications/Slack.app" \
+        "/Applications/Zulip.app" \
         "/Applications/iTerm.app" \
+        "/Applications/Visual Studio Code.app" \
         "/Applications/Claude.app" \
+        "/Applications/Android Studio.app" \
+        "/Applications/Fork.app" \
+        "/Applications/GitHub Desktop.app" \
+        "/Applications/Spotify.app" \
+        "/Applications/Jellyfin Media Player.app" \
+        "/Applications/Grayjay.app" \
+        "/Applications/VLC.app" \
+        "/Applications/Steam.app" \
+        "/Applications/Bitwarden.app" \
         "/Applications/OpenVPN Connect.app" \
-        "/Applications/Microsoft Remote Desktop.app"; do
+        "/Applications/Microsoft Remote Desktop.app" \
+        "/Applications/UTM.app"; do
         [ -d "$app" ] && dockutil --add "$app" --no-restart 2>/dev/null || true
     done
 
@@ -786,7 +944,122 @@ else
 fi
 
 ########################################
-# 14. Xcode IDE
+# 14. Browser extensions
+########################################
+section "Browser extensions"
+
+# ── Firefox extensions (via policies.json) ─────────────────────────────────
+# policies.json is dropped into the Firefox app bundle's distribution/ folder.
+# Firefox reads it on startup and auto-installs the listed extensions.
+# NOTE: This file is overwritten on Firefox updates — the script re-creates it on re-run.
+FIREFOX_DIST="/Applications/Firefox.app/Contents/Resources/distribution"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+POLICIES_SRC="$SCRIPT_DIR/config/firefox_policies.json"
+
+if [ -d "/Applications/Firefox.app" ]; then
+    sudo mkdir -p "$FIREFOX_DIST"
+    if [ -f "$POLICIES_SRC" ]; then
+        sudo cp "$POLICIES_SRC" "$FIREFOX_DIST/policies.json"
+        ok "Firefox policies.json installed (uBlock Origin, Bitwarden, OneTab)"
+    else
+        warn "config/firefox_policies.json not found — place it next to setup_mac.sh"
+        MANUAL_STEPS+=("Copy config/firefox_policies.json next to setup_mac.sh and re-run")
+    fi
+else
+    warn "Firefox not installed yet — will install extensions on next run"
+fi
+
+# Note: Claude extension is Chrome-only — no Firefox version available
+
+# ── Chrome extensions (via managed preferences) ───────────────────────────
+# Chrome reads ExtensionSettings from managed preferences plist.
+# This may not work on all macOS versions without MDM — worst case is a no-op.
+CHROME_MANAGED="/Library/Managed Preferences"
+if [ -d "/Applications/Google Chrome.app" ]; then
+    sudo mkdir -p "$CHROME_MANAGED"
+    sudo defaults write "$CHROME_MANAGED/com.google.Chrome" ExtensionSettings '{
+        "ddkjiahejlhfcafbddmgiahcphecmpfh" = {
+            "installation_mode" = "normal_installed";
+            "update_url" = "https://clients2.google.com/service/update2/crx";
+        };
+        "nngceckbapebfimnlniiiahkandclblb" = {
+            "installation_mode" = "normal_installed";
+            "update_url" = "https://clients2.google.com/service/update2/crx";
+        };
+        "chphlpgkkbolifaimnlloiipkdnihall" = {
+            "installation_mode" = "normal_installed";
+            "update_url" = "https://clients2.google.com/service/update2/crx";
+        };
+        "fcoeoabgfenejglbffodgkkbkcdhcgfn" = {
+            "installation_mode" = "normal_installed";
+            "update_url" = "https://clients2.google.com/service/update2/crx";
+        };
+    }'
+    # Also disable Chrome's built-in password manager (use Bitwarden instead)
+    sudo defaults write "$CHROME_MANAGED/com.google.Chrome" PasswordManagerEnabled -bool false
+    ok "Chrome managed prefs written (uBlock Origin Lite, Bitwarden, OneTab, Claude)"
+    warn "Chrome managed extensions may not load without MDM — check chrome://policy"
+else
+    warn "Chrome not installed yet — will configure extensions on next run"
+fi
+
+# ── Set Firefox as default browser ────────────────────────────────────────
+if [ -d "/Applications/Firefox.app" ]; then
+    info "Setting Firefox as default browser..."
+    open -a Firefox --args --setDefaultBrowser 2>/dev/null || \
+    warn "Could not set Firefox as default — set manually in System Settings > Default Browser"
+fi
+
+########################################
+# 15. Disable auto-launch and auto-update bloat
+########################################
+section "Disabling auto-launch and auto-update bloat"
+
+# ── Microsoft Auto-Update — aggressively remove ──────────────────────────
+MAU_PATHS=(
+    "/Library/Application Support/Microsoft/MAU2.0"
+    "$HOME/Library/LaunchAgents/com.microsoft.update.agent.plist"
+)
+for mau in "${MAU_PATHS[@]}"; do
+    [ -e "$mau" ] && sudo rm -rf "$mau" 2>/dev/null && info "Removed $mau"
+done
+defaults write com.microsoft.autoupdate2 HowToCheck -string "Manual" 2>/dev/null || true
+# Prevent MAU from re-installing via a launch daemon
+sudo launchctl bootout system /Library/LaunchDaemons/com.microsoft.autoupdate.helper.plist 2>/dev/null || true
+ok "Microsoft Auto-Update disabled"
+
+# ── Disable auto-launch for common apps ──────────────────────────────────
+# Spotify
+defaults write com.spotify.client AutoStartSettingIsHidden -bool false 2>/dev/null || true
+defaults write com.spotify.client LoginAutomationMode -string "off" 2>/dev/null || true
+
+# Docker Desktop
+defaults write com.docker.docker SUAutomaticallyCheckForUpdates -bool false 2>/dev/null || true
+mkdir -p "$HOME/.docker"
+if [ -f "$HOME/.docker/daemon.json" ]; then
+    # Don't clobber existing docker config
+    :
+else
+    echo '{}' > "$HOME/.docker/daemon.json"
+fi
+
+# Steam
+defaults write com.valvesoftware.steam AutoLoginUser -string "" 2>/dev/null || true
+
+# Slack
+defaults write com.tinyspeck.slackmacgap SlackLaunchOnLogin -bool false 2>/dev/null || true
+
+# Discord
+defaults write com.hnc.Discord OPEN_ON_STARTUP -bool false 2>/dev/null || true
+
+# Remove all user login items added by apps (reset to clean)
+# This is aggressive — comment out if you have login items you want to keep
+# osascript -e 'tell application "System Events" to delete every login item' 2>/dev/null || true
+
+ok "Auto-launch disabled for major apps"
+
+########################################
+# 16. Xcode IDE
 ########################################
 section "Xcode IDE"
 
@@ -818,18 +1091,62 @@ if [ -d "/Applications/Xcode.app" ]; then
 fi
 
 ########################################
-# 15. Summary
+# 15. Mac App Store apps
+########################################
+section "Mac App Store apps"
+
+if command -v mas &>/dev/null; then
+    # MX Player — App Store ID 1579641008
+    if mas list 2>/dev/null | grep -q "1579641008"; then
+        ok "MX Player already installed"
+    else
+        info "Installing MX Player from App Store..."
+        mas install 1579641008 2>/dev/null || warn "MX Player install failed (sign into App Store?)"
+    fi
+else
+    warn "mas not available — install MX Player manually from the App Store"
+fi
+
+########################################
+# 16. Manual-download apps
+########################################
+section "Manual-download apps"
+
+# AirCaption — no brew cask, download from website
+if [ -d "/Applications/AirCaption.app" ]; then
+    ok "AirCaption already installed"
+else
+    info "Opening AirCaption download page..."
+    open "https://www.aircaption.com/download" 2>/dev/null || true
+    MANUAL_STEPS+=("AirCaption: download and install from https://www.aircaption.com/download")
+    warn "AirCaption must be downloaded manually — opened download page in browser"
+fi
+
+########################################
+# 17. Desktop background — solid black
+########################################
+section "Desktop background"
+
+info "Setting desktop background to solid black..."
+osascript -e 'tell application "Finder" to set desktop picture to POSIX file "/System/Library/Desktop Pictures/Solid Colors/Black.png"' 2>/dev/null || \
+osascript -e 'tell application "System Events" to tell every desktop to set picture to "/System/Library/Desktop Pictures/Solid Colors/Black.png"' 2>/dev/null || \
+warn "Could not set desktop background automatically"
+ok "Desktop background set to black"
+
+########################################
+# 18. Summary
 ########################################
 section "Setup Complete!"
 
 echo -e "${GREEN}What you got:${NC}"
 echo ""
 echo "  Applications:"
-echo "    Browsers:       Chrome, Firefox"
+echo "    Browsers:       Chrome, Firefox (default)"
 echo "    Communication:  Discord, Slack, Zulip"
-echo "    Development:    Android Studio, VS Code, Docker, iTerm2, Fork, GitUp"
+echo "    Development:    Android Studio, VS Code, Docker, iTerm2, Fork, GitUp,"
+echo "                    GitHub Desktop, Claude Code"
 echo "    AI/LLM:         Claude Desktop, Ollama"
-echo "    Media:          Jellyfin, Grayjay, Spotify, VLC"
+echo "    Media:          Jellyfin, Grayjay, Spotify, VLC, MX Player"
 echo "    Networking:     Tailscale, OpenVPN Connect, Microsoft Remote Desktop"
 echo "    Utilities:      BetterTouchTool, Raycast, Karabiner-Elements,"
 echo "                    KeepingYouAwake, AppCleaner, The Unarchiver,"
@@ -837,22 +1154,28 @@ echo "                    GrandPerspective, Stats, Bitwarden"
 echo "    Gaming:         Steam"
 echo "    Virtualization: UTM"
 echo ""
-echo "  Terminal:"
+echo "  Terminal + Dev:"
 echo "    Zsh vi-mode, Ctrl-R search, 10M line history"
 echo "    Fish-like autosuggestions + syntax highlighting"
 echo "    Vim: gruvbox, NERDTree, mouse/trackpad, bell disabled"
 echo "    Git: colored diffs, diff-highlight, aliases"
+echo "    CLI: whisper-cpp, ffmpeg, Claude Code, bitwarden-cli"
+echo "    Python venv: /opt/brobpy (activated by default)"
 echo "    All bells/beeps disabled (zsh, vim, iTerm, system)"
+echo ""
+echo "  Browser extensions (auto-installed):"
+echo "    Firefox: uBlock Origin, Bitwarden, OneTab"
+echo "    Chrome:  uBlock Origin Lite, Bitwarden, OneTab, Claude"
 echo ""
 echo "  Preferences:"
 echo "    All animations disabled, tiling margins removed"
 echo "    Fast key repeat, no autocorrect/smart quotes"
-echo "    Finder: list view, extensions, hidden files, path bar"
+echo "    Finder: list view, hidden files, path bar, home in sidebar"
+echo "    Finder sidebar: Recents/Tags/iCloud Drive removed"
 echo "    Screenshots: ~/Screenshots, PNG, no shadow"
-echo "    Dock: auto-hide, no recents, scale minimize"
-echo "    System sounds disabled"
-echo ""
-echo "  Dock: Firefox | Chrome | Discord | iTerm | Claude | OpenVPN | RDP"
+echo "    Desktop background solid black, iTerm2 background black"
+echo "    Auto-launch disabled: Spotify, Docker, Slack, Discord, Steam"
+echo "    Microsoft Auto-Update killed"
 echo ""
 
 echo -e "${YELLOW}  Manual steps:${NC}"
@@ -864,12 +1187,16 @@ echo "  3. Permissions (System Settings > Privacy & Security):"
 echo "     Accessibility: BetterTouchTool, Karabiner, Raycast"
 echo "     Full Disk Access: iTerm, GrandPerspective"
 echo "  4. Git identity: git config --global user.name/email"
-echo "  5. Browser extensions: install manually from stores"
-echo "  6. iTerm2: Profiles > Colors > dark background"
-echo "  7. Ollama: ollama pull llama3"
-echo "  8. Android Studio: complete setup wizard on first launch"
+echo "  5. Chrome extensions: verify at chrome://policy (may need manual install)"
+echo "  6. Ollama: ollama pull llama3"
+echo "  7. Android Studio: complete setup wizard on first launch"
+echo "  8. AirCaption: download from https://www.aircaption.com/download"
 echo "  9. TODO — CornerFix: https://github.com/makalin/CornerFix"
-echo " 10. Custom shell config: ~/.zsh_user_custom"
+echo " 10. TODO — Window management / Spaces: pick and configure one of:"
+echo "     AeroSpace: brew install --cask nikitabobko/tap/aerospace"
+echo "     yabai+skhd: brew install koekeishiya/formulae/yabai koekeishiya/formulae/skhd"
+echo "     Or stick with BetterTouchTool + macOS native tiling"
+echo " 11. Custom shell config: ~/.zsh_user_custom"
 echo ""
 
 if [ ${#MANUAL_STEPS[@]} -gt 0 ]; then
