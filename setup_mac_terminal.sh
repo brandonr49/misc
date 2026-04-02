@@ -6,8 +6,8 @@
 # Usage:
 #   bash ~/setup_mac.sh
 #
-# Notes:
-#   - Run from a standard user account (will prompt for sudo as needed)
+# IMPORTANT: Do NOT run with sudo. Run as your normal user.
+#   The script will prompt for sudo only when specific commands need it.
 #   - Safe to re-run (idempotent)
 #   - Some steps require being signed into the Mac App Store first
 #   - After running, a reboot is recommended for all preferences to take effect
@@ -44,6 +44,26 @@ if [[ "$(uname)" != "Darwin" ]]; then
     exit 1
 fi
 ok "Running on macOS $(sw_vers -productVersion)"
+
+if [[ "$EUID" -eq 0 ]]; then
+    fail "Do not run this script as root or with sudo."
+    echo "     Homebrew refuses to install as root, and most of this script"
+    echo "     should run as your normal user. Commands that need elevated"
+    echo "     privileges will prompt for sudo individually."
+    echo ""
+    echo "     Run it like this:  bash ~/setup_mac.sh"
+    exit 1
+fi
+ok "Running as user $(whoami)"
+
+# Cache sudo credentials upfront so the script can run unattended.
+# A background process refreshes the timestamp so it doesn't expire mid-run.
+info "Requesting sudo password (will be cached for the duration of this script)..."
+sudo -v
+while true; do sudo -n true; sleep 50; kill -0 "$$" || exit; done 2>/dev/null &
+SUDO_KEEPALIVE_PID=$!
+trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
+ok "sudo credentials cached"
 
 # Track what we couldn't install for the summary
 MANUAL_STEPS=()
