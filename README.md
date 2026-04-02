@@ -4,42 +4,47 @@ Automated setup scripts for fresh macOS and Linux installations. Installs
 applications, configures terminal environment, sets system preferences, and
 gets a new machine to a usable dev state with a single command.
 
-## Quick start
+## macOS — Fresh install procedure
 
-```bash
-# Clone the repo
-git clone https://github.com/brandonr49/misc.git
-# This will trigger xcode install to get the git command?
-cd misc/
-```
+1. **Set up your user** — walk through the macOS setup assistant, create your account
+2. **Sign into your Apple ID** — required for App Store installs (Xcode, MX Player)
+3. **Open the App Store** — confirm you're signed in
+4. **Update macOS** — System Settings > General > Software Update, install and reboot
+5. **Open Terminal** (Cmd+Space → "Terminal") and clone the repo:
+   ```bash
+   git clone https://github.com/brandonr49/misc.git
+   ```
+   This triggers the Xcode Command Line Tools install dialog — click **Install**,
+   wait for it to finish, then re-run the clone command.
+6. **Run the script:**
+   ```bash
+   cd misc/
+   bash setup_mac_terminal.sh                          # basic run
+   bash setup_mac_terminal.sh --hostname my-macbook    # also set hostname
+   bash setup_mac_terminal.sh --backup                 # back up existing dotfiles first
+   bash setup_mac_terminal.sh -h                       # show help
+   ```
 
-### macOS
+> **Do NOT run with `sudo`.** The script sets up passwordless sudo on first run
+> and handles elevation internally.
 
-**Before running:**
-1. Sign into the Mac App Store (required for Xcode and MX Player installs)
-2. Optionally edit `HOSTNAME=""` at the top of `setup_mac.sh`
-
-```bash
-bash setup_mac.sh                          # basic run
-bash setup_mac.sh --hostname my-macbook    # also set hostname
-bash setup_mac.sh -h                       # show help
-```
+After the script finishes, **reboot** for all preferences to take effect.
+See the full manual steps checklist printed at the end of the script.
 
 ### Linux (Fedora)
 
 ```bash
+git clone https://github.com/brandonr49/misc.git
+cd misc/
 bash setup_linux.sh
 ```
-
-> **Do NOT run with `sudo`.** Both scripts handle elevation internally.
-> The Mac script sets up passwordless sudo via `/etc/sudoers.d/` on first run.
 
 ## Repository layout
 
 ```
-workstation-setup/
+misc/
 ├── README.md
-├── setup_mac.sh              # macOS setup (Homebrew, casks, defaults, dotfiles)
+├── setup_mac_terminal.sh     # macOS setup (Homebrew, casks, defaults, dotfiles)
 ├── setup_linux.sh            # Linux setup (dnf/apt, dotfiles)
 ├── config/
 │   ├── firefox_policies.json # Firefox extension auto-install policy
@@ -88,7 +93,7 @@ during app installs still leaves you with a working shell:
 | AI / LLM | Claude Desktop, Ollama |
 | Media | Jellyfin, Grayjay, Spotify, VLC, MX Player |
 | Networking | Tailscale, OpenVPN Connect, Microsoft Remote Desktop |
-| Utilities | BetterTouchTool, Raycast, Karabiner-Elements, KeepingYouAwake, AppCleaner, The Unarchiver, GrandPerspective, Stats, Bitwarden, ForkLift, Cyberduck, Radio Silence |
+| Utilities | BetterTouchTool, Raycast, Karabiner-Elements, KeepingYouAwake, AppCleaner, The Unarchiver, GrandPerspective, Stats, Bitwarden, ForkLift, Cyberduck, Radio Silence, Maccy |
 | Gaming | Steam |
 | Virtualization | UTM |
 
