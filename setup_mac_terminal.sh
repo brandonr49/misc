@@ -1138,7 +1138,68 @@ warn "Could not set desktop background automatically"
 ok "Desktop background set to black"
 
 ########################################
-# 18. Summary
+# 18. BetterTouchTool preset
+########################################
+section "BetterTouchTool preset"
+
+BTT_PRESET="$SCRIPT_DIR/config/btt_preset.bttpreset"
+if [ -f "$BTT_PRESET" ]; then
+    if [ -d "/Applications/BetterTouchTool.app" ]; then
+        info "Importing BetterTouchTool preset..."
+        open "$BTT_PRESET" 2>/dev/null || warn "Could not import BTT preset (BTT may not be running)"
+        ok "BTT preset imported (mouse buttons, gestures, etc.)"
+    else
+        warn "BetterTouchTool not installed yet — will import preset on next run"
+    fi
+else
+    warn "config/btt_preset.bttpreset not found — place it next to setup_mac.sh"
+    info "To create one: BTT > Presets > right-click > Export Preset"
+fi
+
+########################################
+# 19. Whisper model + subtitle script
+########################################
+section "Whisper model + subtitle tools"
+
+WHISPER_MODEL_DIR="$HOME/models"
+WHISPER_MODEL="$WHISPER_MODEL_DIR/ggml-large-v3-turbo-q8_0.bin"
+
+if [ -f "$WHISPER_MODEL" ]; then
+    ok "Whisper model already downloaded"
+else
+    info "Downloading whisper large-v3-turbo model (~1GB)..."
+    mkdir -p "$WHISPER_MODEL_DIR"
+    curl -L -o "$WHISPER_MODEL" \
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin" 2>/dev/null && \
+        ok "Whisper model downloaded to $WHISPER_MODEL" || \
+        warn "Whisper model download failed — retry manually"
+fi
+
+# Install subtitle script to /usr/local/bin
+SUBTITLE_SRC="$SCRIPT_DIR/scripts/subtitle.sh"
+if [ -f "$SUBTITLE_SRC" ]; then
+    sudo cp "$SUBTITLE_SRC" /usr/local/bin/subtitle
+    sudo chmod +x /usr/local/bin/subtitle
+    ok "subtitle command installed to /usr/local/bin/subtitle"
+    info "Usage: subtitle /path/to/movie.mkv"
+    info "       subtitle /path/to/media/          # batch"
+    info "       subtitle /path/to/media/ --recursive"
+else
+    warn "scripts/subtitle.sh not found — place it next to setup_mac.sh"
+fi
+
+# Add Metal acceleration env var to zsh_user_custom (don't clobber existing content)
+if ! grep -q "GGML_METAL_PATH_RESOURCES" "$HOME/.zsh_user_custom" 2>/dev/null; then
+    cat >> "$HOME/.zsh_user_custom" << 'WHISPER_EOF'
+
+# Whisper.cpp Metal GPU acceleration (Apple Silicon)
+export GGML_METAL_PATH_RESOURCES="$(brew --prefix whisper-cpp 2>/dev/null)/share/whisper-cpp"
+WHISPER_EOF
+    ok "Whisper Metal env var added to ~/.zsh_user_custom"
+fi
+
+########################################
+# 20. Summary
 ########################################
 section "Setup Complete!"
 
@@ -1166,6 +1227,7 @@ echo "    Vim: gruvbox, NERDTree, mouse/trackpad, bell disabled"
 echo "    Git: colored diffs, diff-highlight, aliases"
 echo "    CLI: whisper-cpp, ffmpeg, Claude Code, bitwarden-cli"
 echo "    Python venv: /opt/brobpy (activated by default)"
+echo "    subtitle command: generate .srt files for Jellyfin (whisper-cpp)"
 echo "    All bells/beeps disabled (zsh, vim, iTerm, system)"
 echo ""
 echo "  Browser extensions (auto-installed):"
@@ -1181,6 +1243,7 @@ echo "    Screenshots: ~/Screenshots, PNG, no shadow"
 echo "    Desktop background solid black, iTerm2 background black"
 echo "    Auto-launch disabled: Spotify, Docker, Slack, Discord, Steam"
 echo "    Microsoft Auto-Update killed"
+echo "    BetterTouchTool preset imported (config/btt_preset.bttpreset)"
 echo ""
 
 echo -e "${YELLOW}  Manual steps:${NC}"

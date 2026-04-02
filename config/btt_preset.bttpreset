@@ -1,0 +1,13 @@
+{
+  "BTTPresetName": "workstation-setup",
+  "BTTPresetContent": [
+    {
+      "BTTAppBundleIdentifier": "BT.G",
+      "BTTAppName": "Global",
+      "BTTTriggers": [
+      ]
+    }
+  ],
+  "BTTPresetNotes": "Workstation setup BTT preset. Add your mouse button mappings, trackpad gestures, keyboard shortcuts, etc. Export from BTT and replace this file.",
+  "BTTPresetSnapshots": []
+}

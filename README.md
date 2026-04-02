@@ -40,8 +40,11 @@ workstation-setup/
 ├── README.md
 ├── setup_mac.sh              # macOS setup (Homebrew, casks, defaults, dotfiles)
 ├── setup_linux.sh            # Linux setup (dnf/apt, dotfiles)
-└── config/
-    └── firefox_policies.json # Firefox extension auto-install policy
+├── config/
+│   ├── firefox_policies.json # Firefox extension auto-install policy
+│   └── btt_preset.bttpreset  # BetterTouchTool preset (mouse buttons, gestures)
+└── scripts/
+    └── subtitle.sh           # Generate .srt subtitles from video files (whisper-cpp)
 ```
 
 ## What the macOS script does
@@ -63,14 +66,16 @@ during app installs still leaves you with a working shell:
 | 10 | Python venv | Creates `/opt/brobpy/` venv, activated by default in .zshrc |
 | 11 | macOS prefs | ~60 `defaults write` commands (see below) |
 | 12 | Remove bloat | GarageBand, iMovie, Keynote, Pages, Numbers |
-| 13 | GUI apps | ~30 apps via `brew install --cask` |
+| 13 | GUI apps | ~33 apps via `brew install --cask` |
 | 14 | Browser ext | Firefox: policies.json. Chrome: managed prefs. Firefox set as default |
 | 15 | Auto-launch | Kills Microsoft Auto-Update, disables auto-start for Spotify/Docker/Slack/Discord/Steam |
 | 16 | Dock layout | Clears dock, pins all major visual apps |
 | 17 | Xcode IDE | Via Mac App Store (`mas install`) |
-| 18 | App Store | MX Player |
-| 19 | AirCaption | Opens download page (no brew cask) |
-| 20 | Background | Solid black desktop + black iTerm2 background |
+| 18 | BTT preset | Imports config/btt_preset.bttpreset (mouse buttons, gestures) |
+| 19 | Whisper + subtitle | Downloads large-v3-turbo model, installs `subtitle` command |
+| 20 | App Store | MX Player |
+| 21 | AirCaption | Opens download page (no brew cask) |
+| 22 | Background | Solid black desktop + black iTerm2 background |
 
 ## GUI apps installed
 
@@ -82,7 +87,7 @@ during app installs still leaves you with a working shell:
 | AI / LLM | Claude Desktop, Ollama |
 | Media | Jellyfin, Grayjay, Spotify, VLC, MX Player |
 | Networking | Tailscale, OpenVPN Connect, Microsoft Remote Desktop |
-| Utilities | BetterTouchTool, Raycast, Karabiner-Elements, KeepingYouAwake, AppCleaner, The Unarchiver, GrandPerspective, Stats, Bitwarden |
+| Utilities | BetterTouchTool, Raycast, Karabiner-Elements, KeepingYouAwake, AppCleaner, The Unarchiver, GrandPerspective, Stats, Bitwarden, ForkLift, Cyberduck, Radio Silence |
 | Gaming | Steam |
 | Virtualization | UTM |
 
@@ -178,6 +183,44 @@ The venv persists across terminal sessions. To deactivate temporarily: `deactiva
 9. **AirCaption**: download from https://www.aircaption.com/download
 10. **CornerFix** (square window corners): https://github.com/makalin/CornerFix
 
+## Subtitle generation (whisper-cpp)
+
+The script installs `whisper-cpp`, `ffmpeg`, downloads the `large-v3-turbo` whisper model,
+and installs a `subtitle` command to `/usr/local/bin/`:
+
+```bash
+# Single file
+subtitle /path/to/movie.mkv
+
+# All videos in a directory
+subtitle /path/to/media/
+
+# Recursive
+subtitle /path/to/media/ --recursive
+```
+
+Creates `.srt` files next to each video. Jellyfin picks these up automatically as
+sidecar subtitles — no configuration needed. Runs locally on Apple Silicon Metal GPU
+(~5-10x realtime speed). Skips files that already have subtitles.
+
+Override the model or language with env vars:
+```bash
+WHISPER_MODEL=~/models/other-model.bin subtitle movie.mkv
+WHISPER_LANG=es subtitle movie.mkv    # Spanish
+```
+
+## BetterTouchTool preset
+
+The script imports `config/btt_preset.bttpreset` on each run. To set it up:
+
+1. Configure BTT the way you want (mouse buttons, gestures, shortcuts)
+2. BTT > Presets > right-click your preset > Export Preset
+3. Save as `config/btt_preset.bttpreset` in the repo
+4. Commit — next run of the script imports it on any fresh machine
+
+Recommended BTT config: map Logitech mouse button 4/5 to Cmd+[/Cmd+] for
+Finder back/forward navigation.
+
 ## Reverting changes
 
 | What | How |
@@ -188,4 +231,7 @@ The venv persists across terminal sessions. To deactivate temporarily: `deactiva
 | Python venv | `sudo rm -rf /opt/brobpy` |
 | Firefox extensions | `sudo rm /Applications/Firefox.app/Contents/Resources/distribution/policies.json` |
 | Chrome managed prefs | `sudo rm "/Library/Managed Preferences/com.google.Chrome.plist"` |
+| BTT preset | Reset in BTT > Presets, or delete and reimport |
+| Whisper model | `rm ~/models/ggml-large-v3-turbo-q8_0.bin` |
+| Subtitle command | `sudo rm /usr/local/bin/subtitle` |
 | macOS preferences | Most revert on factory reset. Individual: `defaults delete <domain> <key>` |
