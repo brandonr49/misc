@@ -1199,7 +1199,42 @@ WHISPER_EOF
 fi
 
 ########################################
-# 20. Summary
+# 20. AI Agents (OpenClaw + Hermes)
+########################################
+section "AI Agents"
+
+# ── OpenClaw ──────────────────────────────────────────────────────────────
+# Personal AI assistant framework. Requires Node 22+ (installed via brew above).
+# After install, run: openclaw onboard --install-daemon
+if command -v openclaw &>/dev/null; then
+    ok "OpenClaw already installed ($(openclaw --version 2>/dev/null || echo 'unknown version'))"
+else
+    info "Installing OpenClaw..."
+    npm install -g openclaw@latest 2>/dev/null && \
+        ok "OpenClaw installed" || \
+        warn "OpenClaw install failed (may need Node 22+ — run: nvm install 22)"
+fi
+
+# ── Hermes Agent ──────────────────────────────────────────────────────────
+# Self-improving AI agent by Nous Research. Installs its own Python/deps.
+# After install, run: hermes setup
+if command -v hermes &>/dev/null; then
+    ok "Hermes Agent already installed"
+else
+    info "Installing Hermes Agent..."
+    curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash 2>/dev/null && \
+        ok "Hermes Agent installed" || \
+        warn "Hermes Agent install failed"
+fi
+
+info ""
+info "Both agents require interactive setup after install:"
+info "  OpenClaw:  openclaw onboard --install-daemon"
+info "  Hermes:    hermes setup"
+info "These configure your LLM provider (API keys) and messaging channels."
+
+########################################
+# 21. Summary
 ########################################
 section "Setup Complete!"
 
@@ -1210,7 +1245,7 @@ echo "    Browsers:       Chrome, Firefox (default)"
 echo "    Communication:  Discord, Slack, Zulip"
 echo "    Development:    Android Studio, VS Code, Docker, iTerm2, Fork, GitUp,"
 echo "                    GitHub Desktop, Claude Code"
-echo "    AI/LLM:         Claude Desktop, Ollama"
+echo "    AI/LLM:         Claude Desktop, Ollama, OpenClaw, Hermes Agent"
 echo "    Media:          Jellyfin, Grayjay, Spotify, VLC, MX Player"
 echo "    Networking:     Tailscale, OpenVPN Connect, Microsoft Remote Desktop"
 echo "    Utilities:      BetterTouchTool, Raycast, Karabiner-Elements,"
@@ -1257,14 +1292,17 @@ echo "     Full Disk Access: iTerm, GrandPerspective"
 echo "  4. Git identity: git config --global user.name/email"
 echo "  5. Chrome extensions: verify at chrome://policy (may need manual install)"
 echo "  6. Ollama: ollama pull llama3"
-echo "  7. Android Studio: complete setup wizard on first launch"
-echo "  8. AirCaption: download from https://www.aircaption.com/download"
-echo "  9. TODO — CornerFix: https://github.com/makalin/CornerFix"
-echo " 10. TODO — Window management / Spaces: pick and configure one of:"
+echo "  7. AI Agents (configure LLM provider + channels):"
+echo "     openclaw onboard --install-daemon"
+echo "     hermes setup"
+echo "  8. Android Studio: complete setup wizard on first launch"
+echo "  9. AirCaption: download from https://www.aircaption.com/download"
+echo " 10. TODO — CornerFix: https://github.com/makalin/CornerFix"
+echo " 11. TODO — Window management / Spaces: pick and configure one of:"
 echo "     AeroSpace: brew install --cask nikitabobko/tap/aerospace"
 echo "     yabai+skhd: brew install koekeishiya/formulae/yabai koekeishiya/formulae/skhd"
 echo "     Or stick with BetterTouchTool + macOS native tiling"
-echo " 11. Custom shell config: ~/.zsh_user_custom"
+echo " 12. Custom shell config: ~/.zsh_user_custom"
 echo ""
 
 if [ ${#MANUAL_STEPS[@]} -gt 0 ]; then
